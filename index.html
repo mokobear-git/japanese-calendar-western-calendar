@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=BIZ+UDGothic:wght@700&display=swap">
 <style>
-/* Layout: 単一カラムの計算カード。上部にタブ（①和暦→西暦 / ②CA）、結果は大きな数字で最上位に置く */
+/* Layout: 単一カラムの計算カード。上部にタブ（①和暦⇄西暦 / ②期間）、結果は大きな数字で最上位に置く */
 :root {
   --paper: #eef2f7;
   --surface: #ffffff;
@@ -110,6 +110,7 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
   font-variant-numeric: tabular-nums; letter-spacing: .01em; overflow-wrap: anywhere; color: var(--ink);
 }
 .big.dim { color: var(--muted); font-size: 1.6rem; }
+.big.jp { font-family: var(--font-body); font-size: 2.1rem; letter-spacing: 0; }
 .sub { font-size: 1.05rem; overflow-wrap: anywhere; }
 .sub .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .5rem 1rem; margin: 0; }
@@ -136,6 +137,7 @@ details summary { cursor: pointer; font-weight: 700; }
   .text-in { font-size: 1.5rem; padding: .7rem .8rem; }
   .cal input { font-size: 1.05rem; padding: .55rem .5rem; }
   .big { font-size: 2.5rem; }
+  .big.jp { font-size: 1.65rem; }
   button { min-height: 2.8rem; }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -148,14 +150,14 @@ details summary { cursor: pointer; font-weight: 700; }
   <h1>和暦西暦・CA計算<small>大正・昭和・平成・令和（T/S/H/R）対応</small></h1>
 
   <nav class="tabs" role="tablist" aria-label="機能">
-    <a href="#wareki" id="tab-wareki" role="tab" aria-controls="panel-wareki">① 和暦→西暦</a>
+    <a href="#wareki" id="tab-wareki" role="tab" aria-controls="panel-wareki">① 和暦⇄西暦</a>
     <a href="#ca" id="tab-ca" role="tab" aria-controls="panel-ca">② 期間</a>
   </nav>
 
-  <!-- ① 和暦→西暦 -->
+  <!-- ① 和暦⇄西暦 -->
   <section class="panel" id="panel-wareki" role="tabpanel" aria-labelledby="tab-wareki">
     <div class="card result" aria-live="polite">
-      <div class="label">西暦</div>
+      <div class="label" id="w-label">西暦</div>
       <div class="big" id="w-out">—</div>
       <div class="sub" id="w-sub"></div>
       <div class="row">
@@ -173,8 +175,9 @@ details summary { cursor: pointer; font-weight: 700; }
         </div>
       </div>
       <div id="w-msg"></div>
-      <p class="hint" id="w-hint">入力例：</p>
-      <p class="hint">年月のみ（日なし）も可。その場合は <code>YYYY/MM</code> で表示。</p>
+      <p class="hint">和暦を入れると西暦、西暦を入れると和暦を表示。年月のみ（日なし）も可。</p>
+      <p class="hint" id="w-hint-w">和暦→西暦：</p>
+      <p class="hint" id="w-hint-s">西暦→和暦：</p>
     </div>
   </section>
 
@@ -338,7 +341,7 @@ details summary { cursor: pointer; font-weight: 700; }
     if (mo < 1 || mo > 12) return { ok: false, error: '月は1〜12' };
     if (d != null && (d < 1 || d > dim(y, mo))) return { ok: false, error: y + '年' + mo + '月は' + dim(y, mo) + '日まで' };
 
-    var res = { ok: true, y: y, m: mo, d: d, partial: d == null };
+    var res = { ok: true, y: y, m: mo, d: d, partial: d == null, fromEra: !!era };
     if (era) {
       var idx = ERAS.indexOf(era), newer = idx > 0 ? ERAS[idx - 1] : null;
       var lo = key(y, mo, d == null ? dim(y, mo) : d), hi = key(y, mo, d == null ? 1 : d);
@@ -440,16 +443,28 @@ details summary { cursor: pointer; font-weight: 700; }
     fromText();
   }
 
-  // ① 和暦→西暦
+  // ① 和暦⇄西暦
   function renderW() {
     var p = W.parseDate($('w-in').value), out = $('w-out'), sub = $('w-sub'), msg = $('w-msg');
     if (p.ok) {
-      var d = describe(p);
-      out.textContent = d.western; out.className = 'big';
-      sub.textContent = d.wareki
-        ? d.wareki + (d.wd ? '（' + d.wd + '）' : '') + '　' + d.short
-        : (d.wd ? '（' + d.wd + '）' : '');
-      setMsg(msg, 'warn', p.warn || '');
+      var d = describe(p), wd = d.wd ? '（' + d.wd + '）' : '';
+      if (p.fromEra) {
+        // 和暦 → 西暦
+        $('w-label').textContent = '西暦'; $('w-copy').textContent = '西暦をコピー';
+        out.textContent = d.western; out.className = 'big';
+        sub.textContent = d.wareki + wd + '　' + d.short;
+        setMsg(msg, 'warn', p.warn || '');
+      } else if (d.wareki) {
+        // 西暦 → 和暦
+        $('w-label').textContent = '和暦'; $('w-copy').textContent = '和暦をコピー';
+        out.textContent = d.wareki; out.className = 'big jp';
+        sub.textContent = d.short + '　' + d.western + wd;
+        setMsg(msg, 'warn', p.warn || '');
+      } else {
+        $('w-label').textContent = '和暦';
+        out.textContent = '—'; out.className = 'big dim'; sub.textContent = d.western + wd;
+        setMsg(msg, 'err', '明治改元（1868年10月23日）より前は和暦に変換できない');
+      }
     } else {
       out.textContent = '—'; out.className = 'big dim'; sub.textContent = '';
       setMsg(msg, 'err', p.empty ? '' : p.error);
@@ -526,11 +541,16 @@ details summary { cursor: pointer; font-weight: 700; }
   $('a-in').placeholder = '例: ' + exA[1];
   $('b-in').value = today();
   $('b-in').placeholder = '例: ' + today();
-  var hint = $('w-hint');
-  exW.forEach(function (s) {
-    hint.appendChild(document.createTextNode(' '));
-    var c = document.createElement('code'); c.textContent = s; hint.appendChild(c);
-  });
+  function addCodes(el, list) {
+    list.forEach(function (s) {
+      el.appendChild(document.createTextNode(' '));
+      var c = document.createElement('code'); c.textContent = s; el.appendChild(c);
+    });
+  }
+  var rs = W.randomDate();
+  addCodes($('w-hint-w'), exW);
+  addCodes($('w-hint-s'), [rs.y + '/' + rs.m + '/' + rs.d, String(rs.y) + (rs.m < 10 ? '0' : '') + rs.m + (rs.d < 10 ? '0' : '') + rs.d,
+    rs.y + '年' + rs.m + '月' + rs.d + '日', rs.y + '/' + rs.m]);
 
   bind('w', renderW);
   bind('a', renderC);
