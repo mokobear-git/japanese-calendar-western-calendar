@@ -149,7 +149,7 @@ details summary { cursor: pointer; font-weight: 700; }
 
   <nav class="tabs" role="tablist" aria-label="機能">
     <a href="#wareki" id="tab-wareki" role="tab" aria-controls="panel-wareki">① 和暦→西暦</a>
-    <a href="#ca" id="tab-ca" role="tab" aria-controls="panel-ca">② 期間（CA）</a>
+    <a href="#ca" id="tab-ca" role="tab" aria-controls="panel-ca">② 期間</a>
   </nav>
 
   <!-- ① 和暦→西暦 -->
@@ -166,18 +166,19 @@ details summary { cursor: pointer; font-weight: 700; }
     <div class="card">
       <div class="field">
         <label for="w-in">日付を入力 <span>和暦・西暦どちらでも可</span></label>
-        <input class="text-in" id="w-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例: S46/6/9" value="S46/6/9">
+        <input class="text-in" id="w-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="">
         <div class="row">
           <label class="cal" for="w-cal">カレンダー <input id="w-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
           <button type="button" data-clear="w">クリア</button>
         </div>
       </div>
       <div id="w-msg"></div>
-      <p class="hint">入力例：<code>S46/6/9</code> <code>昭和46年6月9日</code> <code>S46.6.9</code> <code>S460609</code> <code>H元.1.8</code> <code>R8年11月7日</code></p>
+      <p class="hint" id="w-hint">入力例：</p>
+      <p class="hint">年月のみ（日なし）も可。その場合は <code>YYYY/MM</code> で表示。</p>
     </div>
   </section>
 
-  <!-- ② 期間（CA） -->
+  <!-- ② 期間 -->
   <section class="panel" id="panel-ca" role="tabpanel" aria-labelledby="tab-ca" hidden>
     <div class="card result" aria-live="polite">
       <div class="label">2つの日付の間の年月</div>
@@ -195,7 +196,7 @@ details summary { cursor: pointer; font-weight: 700; }
     <div class="card">
       <div class="field">
         <label for="a-in">日付A <span>生年月日など</span></label>
-        <input class="text-in" id="a-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例: 昭和46年6月9日" value="S46/6/9">
+        <input class="text-in" id="a-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="">
         <div class="row">
           <label class="cal" for="a-cal">カレンダー <input id="a-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
           <button type="button" data-clear="a">クリア</button>
@@ -204,7 +205,7 @@ details summary { cursor: pointer; font-weight: 700; }
       </div>
       <div class="field">
         <label for="b-in">日付B <span>検査日・基準日など</span></label>
-        <input class="text-in" id="b-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例: 2026/11/7" value="2026/11/7">
+        <input class="text-in" id="b-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="">
         <div class="row">
           <label class="cal" for="b-cal">カレンダー <input id="b-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
           <button type="button" id="b-today">今日</button>
@@ -213,7 +214,7 @@ details summary { cursor: pointer; font-weight: 700; }
         <div class="echo" id="b-echo"></div>
       </div>
       <div id="c-msg"></div>
-      <p class="hint">A・Bの順序は問わない（新しい方から古い方を引く）。表記は <code>CA年-月</code>。日付Bの「日」が日付Aの「日」に達していない月は数えない。</p>
+      <p class="hint">A・Bの順序は問わない（新しい方から古い方を引く）。表記は <code>CA年-月</code>。日付Bの「日」が日付Aの「日」に達していない月は数えない。年月のみ（日なし）の入力は月単位で計算。</p>
     </div>
   </section>
 
@@ -267,23 +268,37 @@ details summary { cursor: pointer; font-weight: 700; }
     return null;
   }
 
-  function toWareki(y, m, d) {
+  function eraOf(y, m, d) {
     var k = key(y, m, d);
-    for (var i = 0; i < ERAS.length; i++) {
-      var e = ERAS[i];
-      if (k >= eraStartKey(e)) {
-        var ey = y - e.start[0] + 1;
-        return {
-          era: e, year: ey,
-          text: e.name + (ey === 1 ? '元' : ey) + '年' + m + '月' + d + '日',
-          short: e.abbr + ey + '.' + m + '.' + d
-        };
-      }
-    }
+    for (var i = 0; i < ERAS.length; i++) if (k >= eraStartKey(ERAS[i])) return ERAS[i];
     return null;
   }
+  function eraYearText(e, y) { var ey = y - e.start[0] + 1; return ey === 1 ? '元' : String(ey); }
 
-  // 戻り値: {ok, y, m, d, warn?} | {ok:false, error} | {empty:true}
+  // d を省略すると年月のみの表記
+  function toWareki(y, m, d) {
+    if (d == null) {
+      var e1 = eraOf(y, m, 1), e2 = eraOf(y, m, dim(y, m));
+      if (!e2) return null;
+      var t2 = e2.name + eraYearText(e2, y) + '年' + m + '月';
+      var s2 = e2.abbr + (y - e2.start[0] + 1) + '.' + m;
+      if (!e1 || e1 === e2) return { era: e2, text: t2, short: s2 };
+      var t1 = e1.name + eraYearText(e1, y) + '年' + m + '月';
+      return {
+        era: e2, short: e1.abbr + (y - e1.start[0] + 1) + '.' + m + '／' + s2,
+        text: t1 + '（' + e2.start[2] + '日から' + t2 + '）'
+      };
+    }
+    var e = eraOf(y, m, d);
+    if (!e) return null;
+    return {
+      era: e,
+      text: e.name + eraYearText(e, y) + '年' + m + '月' + d + '日',
+      short: e.abbr + (y - e.start[0] + 1) + '.' + m + '.' + d
+    };
+  }
+
+  // 戻り値: {ok, y, m, d|null, partial, warn?} | {ok:false, error} | {ok:false, empty:true}
   function parseDate(input) {
     var s = normalize(input);
     if (!s) return { ok: false, empty: true };
@@ -292,20 +307,26 @@ details summary { cursor: pointer; font-weight: 700; }
     if (em) { era = findEra(em[1]); rest = em[2]; }
     rest = rest.replace(/^元(?=[年\/.\-])/, '1');
 
-    var y, mo, d, mm;
+    var y, mo, d = null, mm;
     if ((mm = rest.match(/^(\d{1,4})[年\/.\-](\d{1,2})[月\/.\-](\d{1,2})日?$/))) {
       y = +mm[1]; mo = +mm[2]; d = +mm[3];
+    } else if ((mm = rest.match(/^(\d{1,4})[年\/.\-](\d{1,2})月?$/))) {
+      y = +mm[1]; mo = +mm[2];
     } else if (/^\d+$/.test(rest)) {
+      var n = rest.length;
       if (era) {
-        if (rest.length === 6) { y = +rest.slice(0, 2); mo = +rest.slice(2, 4); d = +rest.slice(4, 6); }
-        else if (rest.length === 5) { y = +rest.slice(0, 1); mo = +rest.slice(1, 3); d = +rest.slice(3, 5); }
-        else return { ok: false, error: '元号付きの数字のみ表記は6桁（例: S460609）で入力' };
+        if (n === 6) { y = +rest.slice(0, 2); mo = +rest.slice(2, 4); d = +rest.slice(4, 6); }
+        else if (n === 5) { y = +rest.slice(0, 1); mo = +rest.slice(1, 3); d = +rest.slice(3, 5); }
+        else if (n === 4) { y = +rest.slice(0, 2); mo = +rest.slice(2, 4); }
+        else if (n === 3) { y = +rest.slice(0, 1); mo = +rest.slice(1, 3); }
+        else return { ok: false, error: '元号付きの数字のみ表記は 年2桁＋月2桁（＋日2桁）で入力' };
       } else {
-        if (rest.length === 8) { y = +rest.slice(0, 4); mo = +rest.slice(4, 6); d = +rest.slice(6, 8); }
-        else return { ok: false, error: '数字のみの西暦は8桁（例: 20261107）で入力' };
+        if (n === 8) { y = +rest.slice(0, 4); mo = +rest.slice(4, 6); d = +rest.slice(6, 8); }
+        else if (n === 6) { y = +rest.slice(0, 4); mo = +rest.slice(4, 6); }
+        else return { ok: false, error: '数字のみの西暦は8桁（年月日）または6桁（年月）で入力' };
       }
     } else {
-      return { ok: false, error: '日付として読み取れない。例: S46/6/9、昭和46年6月9日、20261107' };
+      return { ok: false, error: '日付として読み取れない。例: H8/3/21、平成8年3月21日、19960321、平成8年3月' };
     }
 
     if (era) {
@@ -315,16 +336,16 @@ details summary { cursor: pointer; font-weight: 700; }
       return { ok: false, error: '西暦は4桁、和暦は元号（T/S/H/R など）を付けて入力' };
     }
     if (mo < 1 || mo > 12) return { ok: false, error: '月は1〜12' };
-    if (d < 1 || d > dim(y, mo)) return { ok: false, error: y + '年' + mo + '月は' + dim(y, mo) + '日まで' };
+    if (d != null && (d < 1 || d > dim(y, mo))) return { ok: false, error: y + '年' + mo + '月は' + dim(y, mo) + '日まで' };
 
-    var res = { ok: true, y: y, m: mo, d: d };
+    var res = { ok: true, y: y, m: mo, d: d, partial: d == null };
     if (era) {
-      var k = key(y, mo, d), idx = ERAS.indexOf(era);
-      var newer = idx > 0 ? ERAS[idx - 1] : null;
+      var idx = ERAS.indexOf(era), newer = idx > 0 ? ERAS[idx - 1] : null;
+      var lo = key(y, mo, d == null ? dim(y, mo) : d), hi = key(y, mo, d == null ? 1 : d);
       var w = toWareki(y, mo, d);
-      if (k < eraStartKey(era)) {
+      if (lo < eraStartKey(era)) {
         res.warn = era.name + 'は' + era.start[0] + '年' + era.start[1] + '月' + era.start[2] + '日から。この日付は' + (w ? w.text : '明治以前') + 'に当たる';
-      } else if (newer && k >= eraStartKey(newer)) {
+      } else if (newer && hi >= eraStartKey(newer)) {
         res.warn = era.name + 'は' + newer.name + 'への改元前日まで。この日付は' + w.text + 'に当たる';
       }
     }
@@ -332,26 +353,51 @@ details summary { cursor: pointer; font-weight: 700; }
     return res;
   }
 
+  // 年月のみの入力が含まれる場合は月単位（日数なし）
   function diff(a, b) {
     var swapped = false;
-    if (key(a.y, a.m, a.d) > key(b.y, b.m, b.d)) { var t = a; a = b; b = t; swapped = true; }
+    if (key(a.y, a.m, a.d || 0) > key(b.y, b.m, b.d || 0)) { var t = a; a = b; b = t; swapped = true; }
+    var partial = a.d == null || b.d == null;
     var months = (b.y - a.y) * 12 + (b.m - a.m);
-    if (b.d < a.d) months--;
-    var idx = a.m - 1 + months;
-    var ay = a.y + Math.floor(idx / 12), am = idx % 12 + 1, ad = Math.min(a.d, dim(ay, am));
-    return {
-      years: Math.floor(months / 12), months: months % 12,
-      days: dayNum(b.y, b.m, b.d) - dayNum(ay, am, ad),
-      totalMonths: months, totalDays: dayNum(b.y, b.m, b.d) - dayNum(a.y, a.m, a.d),
-      swapped: swapped
-    };
+    var r = { swapped: swapped, partial: partial };
+    if (!partial) {
+      if (b.d < a.d) months--;
+      var idx = a.m - 1 + months;
+      var ay = a.y + Math.floor(idx / 12), am = idx % 12 + 1, ad = Math.min(a.d, dim(ay, am));
+      r.days = dayNum(b.y, b.m, b.d) - dayNum(ay, am, ad);
+      r.totalDays = dayNum(b.y, b.m, b.d) - dayNum(a.y, a.m, a.d);
+    }
+    r.years = Math.floor(months / 12); r.months = months % 12; r.totalMonths = months;
+    return r;
   }
 
-  function fmt(p) { return p.y + '/' + pad(p.m) + '/' + pad(p.d); }
-  function iso(p) { return String(p.y).padStart(4, '0') + '-' + pad(p.m) + '-' + pad(p.d); }
-  function weekday(p) { var t = new Date(0); t.setUTCFullYear(p.y, p.m - 1, p.d); return WEEK[t.getUTCDay()]; }
+  function fmt(p) { return p.y + '/' + pad(p.m) + (p.d == null ? '' : '/' + pad(p.d)); }
+  function iso(p) { return p.d == null ? '' : String(p.y).padStart(4, '0') + '-' + pad(p.m) + '-' + pad(p.d); }
+  function weekday(p) {
+    if (p.d == null) return '';
+    var t = new Date(0); t.setUTCFullYear(p.y, p.m - 1, p.d); return WEEK[t.getUTCDay()];
+  }
 
-  var api = { ERAS: ERAS, normalize: normalize, parseDate: parseDate, toWareki: toWareki, diff: diff, fmt: fmt, iso: iso, weekday: weekday };
+  // 入力例用のランダムな日付（昭和改元〜平成末）
+  function randomDate(rnd) {
+    rnd = rnd || Math.random;
+    var lo = dayNum(1926, 12, 25), hi = dayNum(2019, 4, 30);
+    var t = new Date((lo + Math.floor(rnd() * (hi - lo + 1))) * 86400000);
+    return { ok: true, y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate(), partial: false };
+  }
+  // 同じ日付をいくつかの書き方で
+  function examples(p) {
+    var e = eraOf(p.y, p.m, p.d), ey = p.y - e.start[0] + 1;
+    return [
+      e.abbr + ey + '/' + p.m + '/' + p.d,
+      e.name + eraYearText(e, p.y) + '年' + p.m + '月' + p.d + '日',
+      e.abbr + ey + '.' + p.m + '.' + p.d,
+      e.abbr + pad(ey) + pad(p.m) + pad(p.d),
+      e.abbr + ey + '年' + p.m + '月'
+    ];
+  }
+
+  var api = { ERAS: ERAS, normalize: normalize, parseDate: parseDate, toWareki: toWareki, diff: diff, fmt: fmt, iso: iso, weekday: weekday, randomDate: randomDate, examples: examples };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.WarekiCA = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -400,8 +446,9 @@ details summary { cursor: pointer; font-weight: 700; }
     if (p.ok) {
       var d = describe(p);
       out.textContent = d.western; out.className = 'big';
-      sub.innerHTML = '';
-      sub.textContent = (d.wareki ? d.wareki + '（' + d.wd + '）　' + d.short : '（' + d.wd + '）');
+      sub.textContent = d.wareki
+        ? d.wareki + (d.wd ? '（' + d.wd + '）' : '') + '　' + d.short
+        : (d.wd ? '（' + d.wd + '）' : '');
       setMsg(msg, 'warn', p.warn || '');
     } else {
       out.textContent = '—'; out.className = 'big dim'; sub.textContent = '';
@@ -409,14 +456,14 @@ details summary { cursor: pointer; font-weight: 700; }
     }
   }
 
-  // ② CA
+  // ② 期間
   function echo(el, p) {
     el.innerHTML = '';
     if (!p.ok) return;
-    var d = describe(p);
+    var d = describe(p), extra = [d.wareki, d.wd].filter(Boolean).join('・');
     el.appendChild(document.createTextNode('→ '));
     var b = document.createElement('b'); b.textContent = d.western; el.appendChild(b);
-    el.appendChild(document.createTextNode('（' + (d.wareki ? d.wareki : '') + '・' + d.wd + '）'));
+    if (extra) el.appendChild(document.createTextNode('（' + extra + '）'));
   }
   function renderC() {
     var a = W.parseDate($('a-in').value), b = W.parseDate($('b-in').value);
@@ -433,11 +480,12 @@ details summary { cursor: pointer; font-weight: 700; }
       out.textContent = 'CA' + r.years + '-' + r.months; out.className = 'big';
       sub.innerHTML = '';
       var n = document.createElement('span'); n.className = 'num';
-      n.textContent = r.years + '歳' + r.months + 'か月' + r.days + '日';
+      n.textContent = r.years + '歳' + r.months + 'か月' + (r.partial ? '' : r.days + '日');
       sub.appendChild(n);
       $('c-months').textContent = r.totalMonths.toLocaleString('ja-JP') + 'か月';
-      $('c-days').textContent = r.totalDays.toLocaleString('ja-JP') + '日';
+      $('c-days').textContent = r.partial ? '—' : r.totalDays.toLocaleString('ja-JP') + '日';
       stats.hidden = false;
+      if (r.partial) warns.push('年月のみの入力を含むため、月単位で計算（日は考慮しない）');
       if (r.swapped) warns.push('日付Aが日付Bより新しいため、入れ替えて計算');
     } else {
       out.textContent = '—'; out.className = 'big dim'; sub.textContent = '2つの日付を入力'; stats.hidden = true;
@@ -469,6 +517,20 @@ details summary { cursor: pointer; font-weight: 700; }
     var t = new Date();
     return t.getFullYear() + '/' + (t.getMonth() + 1) + '/' + t.getDate();
   }
+
+  // 入力例：開くたびにランダムな日付
+  var exW = W.examples(W.randomDate()), exA = W.examples(W.randomDate());
+  $('w-in').value = exW[0];
+  $('w-in').placeholder = '例: ' + exW[0];
+  $('a-in').value = exA[0];
+  $('a-in').placeholder = '例: ' + exA[1];
+  $('b-in').value = today();
+  $('b-in').placeholder = '例: ' + today();
+  var hint = $('w-hint');
+  exW.forEach(function (s) {
+    hint.appendChild(document.createTextNode(' '));
+    var c = document.createElement('code'); c.textContent = s; hint.appendChild(c);
+  });
 
   bind('w', renderW);
   bind('a', renderC);
