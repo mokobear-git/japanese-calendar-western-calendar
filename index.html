@@ -127,6 +127,30 @@ table { border-collapse: collapse; width: 100%; font-size: .92rem; }
 th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { font-size: .8rem; color: var(--muted); font-weight: 700; }
 td.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.wcal {
+  border: 1px solid var(--line); border-radius: 8px; padding: .6rem; display: grid; gap: .5rem;
+  background: var(--surface); min-width: 0;
+}
+.wcal-sel { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: .35rem; }
+.wcal select {
+  font: inherit; font-size: 1rem; font-weight: 700; padding: .45rem .3rem; min-width: 0;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink);
+}
+.wcal-nav { display: grid; grid-template-columns: auto 1fr auto; gap: .35rem; align-items: center; }
+.wcal-nav button { min-height: 2.4rem; min-width: 3.2rem; padding: .2rem .5rem; font-size: 1.2rem; }
+.wcal-west { text-align: center; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-family: var(--font-num); }
+.wcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.wcal-grid .dow { text-align: center; font-size: .78rem; color: var(--muted); font-weight: 700; }
+.wcal-grid button {
+  min-height: 2.5rem; padding: 0; font-family: var(--font-num); font-weight: 400; font-size: 1rem;
+  border: 2px solid transparent; background: var(--paper); border-radius: 6px;
+}
+.wcal-grid .sun { color: var(--err); }
+.wcal-grid .sat { color: var(--accent); }
+.wcal-grid button.today { border-color: var(--accent); }
+.wcal-grid button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.wcal-grid .era-mark { display: block; font-size: .6rem; line-height: 1; font-family: var(--font-body); }
+.wcal-foot { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
 details summary { cursor: pointer; font-weight: 700; }
 .toast { font-size: .85rem; color: var(--muted); }
 
@@ -170,9 +194,11 @@ details summary { cursor: pointer; font-weight: 700; }
         <label for="w-in">日付を入力 <span>和暦・西暦どちらでも可</span></label>
         <input class="text-in" id="w-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="">
         <div class="row">
-          <label class="cal" for="w-cal">カレンダー <input id="w-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
+          <label class="cal" for="w-cal">西暦カレンダー <input id="w-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
+          <button type="button" data-wcal="w" aria-expanded="false" aria-controls="w-wcal">和暦カレンダー</button>
           <button type="button" data-clear="w">クリア</button>
         </div>
+        <div class="wcal" id="w-wcal" hidden></div>
       </div>
       <div id="w-msg"></div>
       <p class="hint">和暦を入れると西暦、西暦を入れると和暦を表示。年月のみ（日なし）も可。</p>
@@ -201,19 +227,23 @@ details summary { cursor: pointer; font-weight: 700; }
         <label for="a-in">日付A <span>生年月日など</span></label>
         <input class="text-in" id="a-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="">
         <div class="row">
-          <label class="cal" for="a-cal">カレンダー <input id="a-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
+          <label class="cal" for="a-cal">西暦カレンダー <input id="a-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
+          <button type="button" data-wcal="a" aria-expanded="false" aria-controls="a-wcal">和暦カレンダー</button>
           <button type="button" data-clear="a">クリア</button>
         </div>
+        <div class="wcal" id="a-wcal" hidden></div>
         <div class="echo" id="a-echo"></div>
       </div>
       <div class="field">
         <label for="b-in">日付B <span>検査日・基準日など</span></label>
         <input class="text-in" id="b-in" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="">
         <div class="row">
-          <label class="cal" for="b-cal">カレンダー <input id="b-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
+          <label class="cal" for="b-cal">西暦カレンダー <input id="b-cal" type="date" min="1868-01-01" max="2200-12-31"></label>
+          <button type="button" data-wcal="b" aria-expanded="false" aria-controls="b-wcal">和暦カレンダー</button>
           <button type="button" id="b-today">今日</button>
           <button type="button" data-clear="b">クリア</button>
         </div>
+        <div class="wcal" id="b-wcal" hidden></div>
         <div class="echo" id="b-echo"></div>
       </div>
       <div id="c-msg"></div>
@@ -440,7 +470,134 @@ details summary { cursor: pointer; font-weight: 700; }
     });
     var clr = document.querySelector('[data-clear="' + prefix + '"]');
     clr.addEventListener('click', function () { txt.value = ''; cal.value = ''; onChange(); txt.focus(); });
+    warekiCal(prefix, txt);
     fromText();
+  }
+
+  // 和暦カレンダー（元号・年・月を選んで日を押す）
+  var ERAS = W.ERAS, WEEK = '日月火水木金土';
+  function k3(y, m, d) { return y * 10000 + m * 100 + d; }
+  function dimOf(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+  function eraOf(y, m, d) {
+    var k = k3(y, m, d);
+    for (var i = 0; i < ERAS.length; i++) if (k >= k3.apply(null, ERAS[i].start)) return ERAS[i];
+    return null;
+  }
+  function eraEnd(e) { // 次の元号の改元前日
+    var i = ERAS.indexOf(e);
+    if (i === 0) return [2100, 12, 31];
+    var s = ERAS[i - 1].start, t = new Date(Date.UTC(s[0], s[1] - 1, s[2] - 1));
+    return [t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()];
+  }
+  function overlaps(e, y, m) {
+    var st = e.start, en = eraEnd(e);
+    return k3(y, m, dimOf(y, m)) >= k3(st[0], st[1], st[2]) && k3(y, m, 1) <= k3(en[0], en[1], en[2]);
+  }
+  function opt(sel, value, label) {
+    var o = document.createElement('option'); o.value = value; o.textContent = label; sel.appendChild(o);
+  }
+
+  function warekiCal(prefix, txt) {
+    var box = $(prefix + '-wcal'), btn = document.querySelector('[data-wcal="' + prefix + '"]');
+    var v = { era: null, y: 0, m: 0 }, sel = null;
+    box.innerHTML =
+      '<div class="wcal-sel">' +
+      '<select id="' + prefix + '-wc-era" aria-label="元号"></select>' +
+      '<select id="' + prefix + '-wc-year" aria-label="年"></select>' +
+      '<select id="' + prefix + '-wc-month" aria-label="月"></select></div>' +
+      '<div class="wcal-nav"><button type="button" data-nav="-1" aria-label="前の月">‹</button>' +
+      '<div class="wcal-west" aria-live="polite"></div>' +
+      '<button type="button" data-nav="1" aria-label="次の月">›</button></div>' +
+      '<div class="wcal-grid"></div>' +
+      '<div class="wcal-foot"><button type="button" data-act="today">今日</button>' +
+      '<button type="button" data-act="close">閉じる</button></div>';
+    var sEra = $(prefix + '-wc-era'), sYear = $(prefix + '-wc-year'), sMonth = $(prefix + '-wc-month');
+    var west = box.querySelector('.wcal-west'), grid = box.querySelector('.wcal-grid');
+    ERAS.forEach(function (e, i) { opt(sEra, i, e.name); });
+    for (var m = 1; m <= 12; m++) opt(sMonth, m, m + '月');
+
+    function clamp() {
+      var e = v.era, st = e.start, en = eraEnd(e);
+      if (k3(v.y, v.m, dimOf(v.y, v.m)) < k3(st[0], st[1], st[2])) { v.y = st[0]; v.m = st[1]; }
+      if (k3(v.y, v.m, 1) > k3(en[0], en[1], en[2])) { v.y = en[0]; v.m = en[1]; }
+    }
+    function render() {
+      var e = v.era, maxY = eraEnd(e)[0] - e.start[0] + 1, ey = v.y - e.start[0] + 1;
+      sEra.value = ERAS.indexOf(e);
+      sYear.innerHTML = '';
+      for (var i = 1; i <= maxY; i++) opt(sYear, i, (i === 1 ? '元' : i) + '年');
+      sYear.value = ey; sMonth.value = v.m;
+      west.textContent = '西暦' + v.y + '年' + v.m + '月';
+      box.querySelector('[data-nav="-1"]').disabled = k3(v.y, v.m, 1) <= k3(1868, 10, 1);
+      box.querySelector('[data-nav="1"]').disabled = k3(v.y, v.m, 1) >= k3(2100, 12, 1);
+      grid.innerHTML = '';
+      for (var w = 0; w < 7; w++) {
+        var h = document.createElement('div'); h.className = 'dow' + (w === 0 ? ' sun' : w === 6 ? ' sat' : '');
+        h.textContent = WEEK[w]; grid.appendChild(h);
+      }
+      var first = new Date(Date.UTC(v.y, v.m - 1, 1)).getUTCDay();
+      for (var b = 0; b < first; b++) grid.appendChild(document.createElement('span'));
+      var now = new Date(), tk = k3(now.getFullYear(), now.getMonth() + 1, now.getDate());
+      for (var d = 1; d <= dimOf(v.y, v.m); d++) {
+        var dw = (first + d - 1) % 7, de = eraOf(v.y, v.m, d);
+        var c = document.createElement('button');
+        c.type = 'button'; c.dataset.day = d; c.textContent = d;
+        c.className = (dw === 0 ? 'sun' : dw === 6 ? 'sat' : '') + (k3(v.y, v.m, d) === tk ? ' today' : '');
+        c.setAttribute('aria-pressed', String(!!sel && sel === k3(v.y, v.m, d)));
+        var label = (de ? de.name + (v.y - de.start[0] + 1 === 1 ? '元' : v.y - de.start[0] + 1) + '年' : '') + v.m + '月' + d + '日（' + WEEK[dw] + '）';
+        c.setAttribute('aria-label', label);
+        if (de && v.y === de.start[0] && v.m === de.start[1] && d === de.start[2]) {
+          var mk = document.createElement('span'); mk.className = 'era-mark'; mk.textContent = de.name; c.appendChild(mk);
+        }
+        grid.appendChild(c);
+      }
+    }
+    function setYM(y, m, keepEra) {
+      v.y = y; v.m = m;
+      if (!keepEra || !overlaps(v.era, y, m)) v.era = eraOf(y, m, dimOf(y, m)) || ERAS[ERAS.length - 1];
+      clamp(); render();
+    }
+    function open() {
+      var p = W.parseDate(txt.value), now = new Date();
+      if (p.ok) {
+        sel = p.d == null ? null : k3(p.y, p.m, p.d);
+        v.era = eraOf(p.y, p.m, p.d || 1) || ERAS[ERAS.length - 1];
+        setYM(p.y, p.m, true);
+      } else {
+        sel = null; v.era = null; setYM(now.getFullYear(), now.getMonth() + 1, false);
+      }
+      box.hidden = false; btn.setAttribute('aria-expanded', 'true');
+    }
+    function close() { box.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+
+    btn.addEventListener('click', function () { box.hidden ? open() : close(); });
+    sEra.addEventListener('change', function () {
+      var e = ERAS[+sEra.value], ey = v.y - v.era.start[0] + 1;
+      v.era = e;
+      var maxY = eraEnd(e)[0] - e.start[0] + 1;
+      v.y = e.start[0] - 1 + Math.min(Math.max(ey, 1), maxY);
+      clamp(); render();
+    });
+    sYear.addEventListener('change', function () { v.y = v.era.start[0] - 1 + (+sYear.value); clamp(); render(); });
+    sMonth.addEventListener('change', function () { v.m = +sMonth.value; clamp(); render(); });
+    box.addEventListener('click', function (ev) {
+      var t = ev.target.closest('button');
+      if (!t || !box.contains(t)) return;
+      if (t.dataset.nav) {
+        var idx = v.y * 12 + (v.m - 1) + (+t.dataset.nav);
+        setYM(Math.floor(idx / 12), idx % 12 + 1, true);
+      } else if (t.dataset.act === 'today') {
+        var n = new Date(); v.era = null; setYM(n.getFullYear(), n.getMonth() + 1, false);
+      } else if (t.dataset.act === 'close') {
+        close(); btn.focus();
+      } else if (t.dataset.day) {
+        var d = +t.dataset.day, e = eraOf(v.y, v.m, d);
+        if (!e) return;
+        txt.value = e.abbr + (v.y - e.start[0] + 1) + '/' + v.m + '/' + d;
+        txt.dispatchEvent(new Event('input'));
+        close();
+      }
+    });
   }
 
   // ① 和暦⇄西暦
